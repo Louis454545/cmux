@@ -403,7 +403,7 @@ jobs:
           EOF
 
           curl -fsSL -o /tmp/appimagetool-x86_64.AppImage \
-            https://github.com/AppImage/appimagetool/releases/download/13/appimagetool-x86_64.AppImage
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           chmod +x /tmp/appimagetool-x86_64.AppImage
           ARCH=x86_64 /tmp/appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir cmux-linux-x86_64.AppImage
           test -f cmux-linux-x86_64.tar.gz
