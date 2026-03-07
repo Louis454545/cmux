@@ -72,6 +72,9 @@ Sidebar shows git branch, linked PR status/number, working directory, listening 
 
 ## Install
 
+> [!NOTE]
+> The full cmux app remains macOS-only. Release assets now also include Linux CLI builds (`cmux-linux-x86_64.tar.gz` and `cmux-linux-x86_64.AppImage`) as a compatibility preview, but the native GUI app still requires macOS.
+
 ### DMG (recommended)
 
 <a href="https://github.com/manaflow-ai/cmux/releases/latest/download/cmux-macos.dmg">
