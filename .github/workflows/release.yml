@@ -303,6 +303,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: swift:6.0-jammy
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
