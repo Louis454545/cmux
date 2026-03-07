@@ -5959,7 +5959,9 @@ struct CMUXCLI {
             }
             let signalURL = tmuxWaitForSignalURL(name: name)
             if signal {
-                FileManager.default.createFile(atPath: signalURL.path, contents: Data())
+                guard FileManager.default.createFile(atPath: signalURL.path, contents: Data()) else {
+                    throw CLIError(message: "wait-for failed to create signal file at \(signalURL.path)")
+                }
                 print("OK")
                 return
             }
