@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   workflow-guard-tests:
     runs-on: ubuntu-latest
@@ -24,6 +27,23 @@ jobs:
 
       - name: Validate cmux scheme test configuration
         run: ./tests/test_ci_scheme_testaction_debug.sh
+
+      - name: Validate Linux release artifacts workflow
+        run: ./tests/test_ci_linux_release_assets.sh
+
+  linux-cli-build:
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build Linux CLI
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -O CLI/cmux.swift -o /tmp/cmux-linux
+          /tmp/cmux-linux version
 
   web-typecheck:
     runs-on: ubuntu-latest

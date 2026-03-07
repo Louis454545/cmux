@@ -1,4 +1,4 @@
-name: Release macOS app
+name: Release macOS app + Linux CLI
 
 on:
   push:
@@ -298,3 +298,119 @@ jobs:
         run: |
           security delete-keychain build.keychain >/dev/null 2>&1 || true
           rm -f /tmp/cert.p12
+
+  build-linux-cli:
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Guard immutable Linux release assets
+        id: guard_linux_release_assets
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const { evaluateReleaseAssetGuard } = require('./scripts/release_asset_guard');
+            const tag = context.ref.replace('refs/tags/', '');
+            const immutableAssetNames = ['cmux-linux-x86_64.tar.gz', 'cmux-linux-x86_64.AppImage'];
+            core.setOutput('skip_all', 'false');
+            core.setOutput('skip_upload', 'false');
+            core.setOutput('release_state', 'clear');
+            try {
+              const release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              const existingAssetNames = (release.data.assets || []).map((asset) => asset.name);
+              const {
+                conflicts,
+                missingImmutableAssets,
+                guardState,
+                hasPartialConflict,
+                shouldSkipBuildAndUpload,
+              } = evaluateReleaseAssetGuard({ existingAssetNames, immutableAssetNames });
+              core.setOutput('release_state', guardState);
+
+              if (hasPartialConflict) {
+                core.setFailed(
+                  `Release ${tag} has a partial Linux asset state. Existing immutable assets: ` +
+                  `${conflicts.join(', ')}. Missing immutable assets: ${missingImmutableAssets.join(', ')}. ` +
+                  'Resolve release assets manually before rerunning.'
+                );
+                return;
+              }
+
+              if (shouldSkipBuildAndUpload) {
+                core.notice(
+                  `Release ${tag} already contains immutable Linux assets (${conflicts.join(', ')}). ` +
+                  'Skipping Linux build and upload to preserve existing artifacts.'
+                );
+                core.setOutput('skip_all', 'true');
+                core.setOutput('skip_upload', 'true');
+                return;
+              }
+
+              core.notice(`Release ${tag} exists but has no immutable Linux assets yet; continuing.`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.notice(`Release ${tag} does not exist yet; safe to build and publish Linux assets.`);
+                return;
+              }
+              throw error;
+            }
+
+      - name: Install Linux packaging deps
+        if: steps.guard_linux_release_assets.outputs.skip_all != 'true'
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y curl file squashfs-tools xz-utils
+
+      - name: Build Linux CLI artifacts
+        if: steps.guard_linux_release_assets.outputs.skip_all != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p dist AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/512x512/apps
+          swiftc -parse-as-library -O CLI/cmux.swift -o dist/cmux
+          strip dist/cmux || true
+          ./dist/cmux version
+          tar -C dist -czf cmux-linux-x86_64.tar.gz cmux
+
+          cp dist/cmux AppDir/usr/bin/cmux
+          cp web/public/logo.png AppDir/usr/share/icons/hicolor/512x512/apps/cmux.png
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/cmux" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          cat > AppDir/cmux.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=cmux
+          Comment=cmux Linux CLI
+          Exec=cmux
+          Icon=cmux
+          Terminal=true
+          Categories=Utility;System;TerminalEmulator;
+          EOF
+
+          curl -fsSL -o /tmp/appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/appimagetool/releases/download/13/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool-x86_64.AppImage
+          ARCH=x86_64 /tmp/appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir cmux-linux-x86_64.AppImage
+          test -f cmux-linux-x86_64.tar.gz
+          test -f cmux-linux-x86_64.AppImage
+
+      - name: Upload Linux release assets
+        if: steps.guard_linux_release_assets.outputs.skip_upload != 'true'
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        with:
+          files: |
+            cmux-linux-x86_64.tar.gz
+            cmux-linux-x86_64.AppImage
+          overwrite_files: false

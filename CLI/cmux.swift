@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 #if canImport(Sentry)
 import Sentry
 #endif
@@ -8,6 +12,55 @@ struct CLIError: Error, CustomStringConvertible {
     let message: String
 
     var description: String { message }
+}
+
+private func statModificationTime(_ st: stat) -> TimeInterval {
+#if canImport(Darwin)
+    return TimeInterval(st.st_mtimespec.tv_sec) + TimeInterval(st.st_mtimespec.tv_nsec) / 1_000_000_000
+#else
+    return TimeInterval(st.st_mtim.tv_sec) + TimeInterval(st.st_mtim.tv_nsec) / 1_000_000_000
+#endif
+}
+
+private let socketStreamType: Int32 = {
+#if canImport(Darwin)
+    return SOCK_STREAM
+#else
+    return Int32(SOCK_STREAM.rawValue)
+#endif
+}()
+
+@discardableResult
+private func posixClose(_ fd: Int32) -> Int32 {
+#if canImport(Darwin)
+    return Darwin.close(fd)
+#else
+    return Glibc.close(fd)
+#endif
+}
+
+private func posixConnect(_ fd: Int32, _ address: UnsafePointer<sockaddr>, _ length: socklen_t) -> Int32 {
+#if canImport(Darwin)
+    return Darwin.connect(fd, address, length)
+#else
+    return Glibc.connect(fd, address, length)
+#endif
+}
+
+private func posixWrite(_ fd: Int32, _ buffer: UnsafePointer<CChar>, _ length: Int) -> Int {
+#if canImport(Darwin)
+    return Darwin.write(fd, buffer, length)
+#else
+    return Glibc.write(fd, buffer, length)
+#endif
+}
+
+private func posixRead(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ length: Int) -> Int {
+#if canImport(Darwin)
+    return Darwin.read(fd, buffer, length)
+#else
+    return Glibc.read(fd, buffer, length)
+#endif
 }
 
 private final class CLISocketSentryTelemetry {
@@ -347,7 +400,7 @@ private final class ClaudeHookSessionStore {
         if fd < 0 {
             throw CLIError(message: "Failed to open Claude hook state lock: \(lockPath)")
         }
-        defer { Darwin.close(fd) }
+        defer { posixClose(fd) }
 
         if flock(fd, LOCK_EX) != 0 {
             throw CLIError(message: "Failed to lock Claude hook state: \(lockPath)")
@@ -528,7 +581,7 @@ private enum CLISocketPathResolver {
             if path == defaultSocketPath || path == fallbackSocketPath || path == stagingSocketPath {
                 continue
             }
-            let modified = TimeInterval(st.st_mtimespec.tv_sec) + TimeInterval(st.st_mtimespec.tv_nsec) / 1_000_000_000
+            let modified = statModificationTime(st)
             discovered.append((path: path, mtime: modified))
         }
 
@@ -543,9 +596,9 @@ private enum CLISocketPathResolver {
 
     private static func canConnect(to path: String) -> Bool {
         guard isSocketFile(path) else { return false }
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        let fd = socket(AF_UNIX, socketStreamType, 0)
         guard fd >= 0 else { return false }
-        defer { Darwin.close(fd) }
+        defer { posixClose(fd) }
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -559,7 +612,7 @@ private enum CLISocketPathResolver {
 
         let result = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
-                Darwin.connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+                posixConnect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
         return result == 0
@@ -644,7 +697,7 @@ final class SocketClient {
                 throw CLIError(message: "Socket at \(path) is not owned by the current user — refusing to connect")
             }
 
-            socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
+            socketFD = socket(AF_UNIX, socketStreamType, 0)
             if socketFD < 0 {
                 throw CLIError(message: "Failed to create socket")
             }
@@ -661,7 +714,7 @@ final class SocketClient {
 
             let result = withUnsafePointer(to: &addr) { ptr in
                 ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
-                    Darwin.connect(socketFD, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+                    posixConnect(socketFD, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
             if result == 0 {
@@ -669,7 +722,7 @@ final class SocketClient {
             }
 
             let connectErrno = errno
-            Darwin.close(socketFD)
+            posixClose(socketFD)
             socketFD = -1
 
             let error = CLIError(
@@ -688,7 +741,7 @@ final class SocketClient {
 
     func close() {
         if socketFD >= 0 {
-            Darwin.close(socketFD)
+            posixClose(socketFD)
             socketFD = -1
         }
     }
@@ -697,7 +750,7 @@ final class SocketClient {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
         let payload = command + "\n"
         try payload.withCString { ptr in
-            let sent = Darwin.write(socketFD, ptr, strlen(ptr))
+            let sent = posixWrite(socketFD, ptr, strlen(ptr))
             if sent < 0 {
                 throw CLIError(message: "Failed to write to socket")
             }
@@ -724,7 +777,7 @@ final class SocketClient {
             }
 
             var buffer = [UInt8](repeating: 0, count: 8192)
-            let count = Darwin.read(socketFD, &buffer, buffer.count)
+            let count = posixRead(socketFD, &buffer, buffer.count)
             if count <= 0 {
                 break
             }
@@ -6883,6 +6936,7 @@ struct CMUXCLI {
     }
 
     private func currentExecutablePath() -> String? {
+#if canImport(Darwin)
         var size: UInt32 = 0
         _ = _NSGetExecutablePath(nil, &size)
         if size > 0 {
@@ -6894,6 +6948,12 @@ struct CMUXCLI {
                 }
             }
         }
+#else
+        let procExecutablePath = URL(fileURLWithPath: "/proc/self/exe").resolvingSymlinksInPath().path
+        if !procExecutablePath.isEmpty, procExecutablePath != "/proc/self/exe" {
+            return procExecutablePath
+        }
+#endif
         return Bundle.main.executableURL?.path ?? args.first
     }
 

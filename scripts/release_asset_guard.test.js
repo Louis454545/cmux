@@ -47,3 +47,17 @@ test("marks guard as partial when only some immutable assets exist", () => {
   assert.equal(result.shouldSkipBuildAndUpload, false);
   assert.equal(result.shouldSkipUpload, false);
 });
+
+test("supports custom immutable asset sets for Linux release artifacts", () => {
+  const result = evaluateReleaseAssetGuard({
+    existingAssetNames: ["cmux-linux-x86_64.tar.gz", "notes.txt"],
+    immutableAssetNames: ["cmux-linux-x86_64.tar.gz", "cmux-linux-x86_64.AppImage"],
+  });
+
+  assert.deepEqual(result.conflicts, ["cmux-linux-x86_64.tar.gz"]);
+  assert.deepEqual(result.missingImmutableAssets, ["cmux-linux-x86_64.AppImage"]);
+  assert.equal(result.guardState, RELEASE_ASSET_GUARD_STATE.PARTIAL);
+  assert.equal(result.hasPartialConflict, true);
+  assert.equal(result.shouldSkipBuildAndUpload, false);
+  assert.equal(result.shouldSkipUpload, false);
+});
