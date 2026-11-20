@@ -1,0 +1,69 @@
+name: Arch Linux (cmux-tui)
+
+on:
+  push:
+    branches: [main, devin/linux-arch]
+    paths:
+      - "cmux-tui/**"
+      - "ghostty"
+      - ".github/workflows/ci-arch-linux.yml"
+      - "packaging/arch/**"
+  pull_request:
+    paths:
+      - "cmux-tui/**"
+      - "ghostty"
+      - ".github/workflows/ci-arch-linux.yml"
+      - "packaging/arch/**"
+  workflow_dispatch:
+
+concurrency:
+  group: arch-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git rustup zig curl python
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' cmux-tui/rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal -c clippy rustfmt
+          rustup default "$channel"
+
+      - name: Init ghostty submodule
+        run: git submodule update --init ghostty
+
+      - name: Verify Zig version
+        run: |
+          required=$(scripts/ghostty-zig-version.sh)
+          actual=$(zig version)
+          echo "ghostty minimum_zig_version=$required, zig=$actual"
+          scripts/ghostty-zig-version.sh && zig version
+
+      - name: Build cmux-tui
+        working-directory: cmux-tui
+        run: cargo build --locked -p cmux-tui -p chatmux-relay -p cmux-relay
+
+      - name: Test cmux-tui workspace
+        working-directory: cmux-tui
+        run: cargo test --locked -p cmux-tui -p cmux-tui-core
+
+      - name: Smoke: server lifecycle
+        working-directory: cmux-tui
+        run: |
+          TERM=xterm-256color ./target/debug/cmux-tui --version
+          ./target/debug/cmux-tui server start --session ci-smoke &
+          sleep 3
+          ./target/debug/cmux-tui server status --session ci-smoke
+          ./target/debug/cmux-tui server stop --session ci-smoke
