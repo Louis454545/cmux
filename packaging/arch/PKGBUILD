@@ -23,6 +23,9 @@ makedepends=('git' 'rust' 'zig')
 provides=('cmux')
 conflicts=('cmux')
 options=('!debug' '!lto')
+# For a distributable/AUR package, use the remote source:
+#   source=("cmux::git+https://github.com/Louis454545/cmux.git#branch=devin/linux-arch")
+# This checkout-relative source builds what you have locally:
 source=("cmux::git+file://${startdir}/../..")
 sha256sums=('SKIP')
 
