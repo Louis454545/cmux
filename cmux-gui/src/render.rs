@@ -594,6 +594,9 @@ impl Render for RootView {
         for surface in self.attached.keys() {
             if !now_attached.contains_key(surface) {
                 let surface = *surface;
+                // The new attach connection must re-report its grid even
+                // when the remembered size is unchanged.
+                self.reported_sizes.borrow_mut().remove(&surface);
                 self.enqueue(Box::new(move |mux: &Mux, _ev| mux.detach(surface)));
             }
         }
