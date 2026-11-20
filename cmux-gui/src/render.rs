@@ -508,10 +508,7 @@ impl RootView {
         let report = std::rc::Rc::new(move |cols: u32, rows: u32| {
             if sizes.borrow_mut().insert(surface, (cols, rows)) != Some((cols, rows)) {
                 let _ = tx.send(Box::new(move |mux: &Mux, _ev| {
-                    let _ = mux.control.call(
-                        "resize-surface",
-                        json!({"surface": surface, "cols": cols, "rows": rows}),
-                    );
+                    mux.resize_attached(surface, cols, rows);
                 }));
             }
         });

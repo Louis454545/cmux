@@ -153,6 +153,7 @@ pub struct Mux {
     pub identity: Value,
     attaches: Mutex<HashMap<u64, Attach>>,
     events: smol::channel::Sender<Value>,
+    client_caps: Vec<Value>,
 }
 
 impl Mux {
@@ -167,9 +168,26 @@ impl Mux {
         for _ in 0..30 {
             if let Ok(control) = Connection::open(&path, events.clone()) {
                 let identity = control.call("identify", json!({}))?;
+                // Echo only the capabilities the daemon advertised that we use.
+                const WANTED: [&str; 4] = [
+                    "shared-sizing-v1",
+                    "view-attachment-lease-v1",
+                    "view-attachment-detach-v1",
+                    "browser-pointer-frame-guard-v1",
+                ];
+                let caps: Vec<Value> = identity
+                    .get("capabilities")
+                    .and_then(|c| c.as_array())
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|c| {
+                        c.as_str().map(|s| WANTED.contains(&s)).unwrap_or(false)
+                    })
+                    .collect();
                 control.call(
                     "set-client-info",
-                    json!({"name": "cmux-gui", "capabilities": ["shared-sizing-v1"]}),
+                    json!({"name": "cmux-gui", "capabilities": caps}),
                 )?;
                 control.call("subscribe", json!({"tree_events": "deltas"}))?;
                 return Ok(Arc::new(Mux {
@@ -178,6 +196,7 @@ impl Mux {
                     identity,
                     attaches: Mutex::new(HashMap::new()),
                     events,
+                    client_caps: caps,
                 }));
             }
             if !spawned {
@@ -208,6 +227,12 @@ impl Mux {
         self.detach(surface);
         let path = socket_path_for_session(&self.session);
         if let Ok(conn) = Connection::open(&path, self.events.clone()) {
+            // Capabilities are per-connection; browser attach rejects a
+            // connection that did not echo browser-pointer-frame-guard-v1.
+            let _ = conn.call(
+                "set-client-info",
+                json!({"name": "cmux-gui", "capabilities": self.client_caps}),
+            );
             let mut req = json!({"surface": surface});
             if let Some(obj) = extra.as_object() {
                 for (k, v) in obj {
@@ -222,6 +247,24 @@ impl Mux {
                 .lock()
                 .unwrap()
                 .insert(surface, Attach { conn, lease });
+        }
+    }
+
+    /// Report the grid one attached view occupies. Must go over the attach
+    /// connection — the participant id is per-connection, so reporting on
+    /// `control` would register a phantom viewer that never leaves.
+    pub fn resize_attached(&self, surface: u64, cols: u32, rows: u32) {
+        let conn = self
+            .attaches
+            .lock()
+            .unwrap()
+            .get(&surface)
+            .map(|a| a.conn.clone());
+        if let Some(conn) = conn {
+            let _ = conn.call(
+                "resize-surface",
+                json!({"surface": surface, "cols": cols, "rows": rows}),
+            );
         }
     }
 
