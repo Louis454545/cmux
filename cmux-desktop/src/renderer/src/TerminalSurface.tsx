@@ -121,8 +121,17 @@ export default function TerminalSurface({ surface, focused, onFocus }: Props) {
       }
     };
     const off = window.cmux.onSurfaceEvent(onEvent);
-    const size = fitSize();
-    window.cmux.attach(surface, size.cols, size.rows);
+    // Attach only while visible: a display:none surface (e.g. under a
+    // zoomed sibling) has no size and must not resize the shared PTY.
+    let attached = false;
+    const ensureAttach = () => {
+      const el = wrapRef.current;
+      if (attached || !el || el.clientWidth === 0 || el.clientHeight === 0) return;
+      attached = true;
+      const size = fitSize();
+      window.cmux.attach(surface, size.cols, size.rows);
+    };
+    ensureAttach();
     draw();
 
     // Fit the surface to the pane: resize the PTY when the container
@@ -131,6 +140,9 @@ export default function TerminalSurface({ surface, focused, onFocus }: Props) {
     const ro = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        const el = wrapRef.current;
+        if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+        ensureAttach();
         const s = fitSize();
         const m = modelRef.current;
         if (s.cols !== m.cols || s.rows !== m.rows) {

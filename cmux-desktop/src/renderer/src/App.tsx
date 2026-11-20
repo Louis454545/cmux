@@ -387,14 +387,16 @@ function ScreenView({ screen }: { screen: Screen }) {
       : undefined;
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-      {zoomed ? (
-        <PaneView pane={zoomed} focused={zoomed.id === state.focusedPane} />
-      ) : (
+      {/* Keep the split tree mounted while zoomed so tabs/attaches survive. */}
+      <div style={{ display: zoomed ? "none" : "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
         <SplitNodeView
           node={screen.layout}
           panes={screen.panes}
           focusedPane={state.focusedPane}
         />
+      </div>
+      {zoomed && (
+        <PaneView pane={zoomed} focused={zoomed.id === state.focusedPane} />
       )}
     </div>
   );
