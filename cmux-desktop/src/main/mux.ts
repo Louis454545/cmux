@@ -53,7 +53,12 @@ export class MuxConnection extends EventEmitter {
     this.sock.connect(socketPath);
     this.sock.on("connect", () => this.emit("connect"));
     this.sock.on("data", (d) => this.onData(d));
-    this.sock.on("error", (e) => this.emit("error", e));
+    this.sock.on("error", (e) => {
+      // Reject in-flight calls; an EventEmitter "error" with no listener throws.
+      for (const [, p] of this.pending) p.reject(e);
+      this.pending.clear();
+      if (this.listenerCount("error") > 0) this.emit("error", e);
+    });
     this.sock.on("close", () => this.emit("close"));
   }
 

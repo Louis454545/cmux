@@ -251,12 +251,25 @@ export default function TerminalSurface({ surface, focused, onFocus }: Props) {
   const onKeyDown = (e: React.KeyboardEvent) => {
     const named = namedKey(e);
     if (e.metaKey && e.key === "v") return; // let paste handler run
+    // App chords (palette, splits, tabs, close) stay on the window listener.
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      !e.altKey &&
+      ["k", "d", "t", "w"].includes(e.key.toLowerCase())
+    )
+      return;
     e.preventDefault();
     e.stopPropagation();
     if (named) {
       window.cmux.call("send-key", { surface, keys: [named] }).catch(console.error);
     } else if (e.key.length === 1) {
-      sendText(e.ctrlKey && e.key.length === 1 ? String.fromCharCode(e.key.toUpperCase().charCodeAt(0) - 64) : e.key);
+      let text = e.key;
+      if (e.ctrlKey) {
+        // Ctrl+Space is NUL; other letters map to their control character.
+        text = text === " " ? "\x00" : String.fromCharCode(text.toUpperCase().charCodeAt(0) - 64);
+      }
+      if (e.altKey) text = "\x1b" + text; // Meta sends ESC prefix.
+      sendText(text);
     } else if (e.key === "Enter") {
       sendText("\r");
     }
@@ -312,6 +325,8 @@ function namedKey(e: React.KeyboardEvent): string | null {
     Delete: "delete",
     Insert: "insert",
   };
+  for (let i = 1; i <= 24; i++) map[`F${i}`] = `f${i}`;
+  if (e.key === "Tab" && e.shiftKey) return "backtab";
   const base = map[e.key];
   if (!base) return null;
   const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.shiftKey && "shift"]

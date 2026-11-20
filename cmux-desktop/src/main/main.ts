@@ -92,6 +92,11 @@ async function main() {
     },
   });
 
+  // Deny page permission requests (notifications, media, ...): cmux grants none.
+  const ses = win.webContents.session;
+  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  ses.setPermissionCheckHandler(() => false);
+
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {

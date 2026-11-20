@@ -250,7 +250,14 @@ function Sidebar() {
   };
 
   const newWorkspace = () =>
-    window.cmux.call("create-workspace", {}).then(() => refresh(dispatch));
+    window.cmux
+      .call("create-workspace", {})
+      .then((r: { workspace?: number }) =>
+        r.workspace != null
+          ? window.cmux.call("create-terminal", { workspace: r.workspace })
+          : undefined
+      )
+      .then(() => refresh(dispatch));
 
   return (
     <div

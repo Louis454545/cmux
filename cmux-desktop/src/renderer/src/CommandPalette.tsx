@@ -27,11 +27,22 @@ export default function CommandPalette() {
       if (state.focusedPane != null) return after(fn(state.focusedPane));
     };
     const list: Cmd[] = [
-      { id: "new-ws", title: "New workspace", run: () => after(window.cmux.call("create-workspace", {})) },
+      {
+        id: "new-ws",
+        title: "New workspace",
+        run: () =>
+          after(
+            window.cmux.call("create-workspace", {}).then((r: { workspace?: number }) =>
+              r.workspace != null
+                ? window.cmux.call("create-terminal", { workspace: r.workspace })
+                : undefined
+            )
+          ),
+      },
       { id: "new-pane-right", title: "Split pane right", run: withPane((pane) => window.cmux.call("new-pane-right", { pane })) },
       { id: "new-pane", title: "Split pane down", run: withPane((pane) => window.cmux.call("new-pane", { pane })) },
       { id: "new-tab", title: "New tab", run: withPane((pane) => window.cmux.call("new-tab", { pane })) },
-      { id: "new-browser-tab", title: "New browser tab", run: withPane((pane) => window.cmux.call("new-browser-tab", { pane })) },
+      { id: "new-browser-tab", title: "New browser tab", run: withPane((pane) => window.cmux.call("new-browser-tab", { pane, url: "about:blank" })) },
       { id: "zoom-pane", title: "Zoom/unzoom pane", run: withPane((pane) => window.cmux.call("zoom-pane", { pane })) },
       { id: "undo-layout", title: "Undo layout change", run: () => after(window.cmux.call("undo-layout", {})) },
     ];
