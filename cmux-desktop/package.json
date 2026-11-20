@@ -12,6 +12,17 @@
     "dist": "electron-vite build && electron-builder",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "build": {
+    "appId": "com.cmuxterm.desktop",
+    "productName": "cmux",
+    "directories": { "output": "dist" },
+    "files": ["out/**", "package.json"],
+    "linux": {
+      "category": "Utility",
+      "executableName": "cmux-desktop",
+      "target": ["dir", "pacman", "AppImage"]
+    }
+  },
   "devDependencies": {
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

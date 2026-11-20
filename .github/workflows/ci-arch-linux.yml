@@ -6,12 +6,14 @@ on:
     paths:
       - "cmux-tui/**"
       - "ghostty"
+      - "cmux-desktop/**"
       - ".github/workflows/ci-arch-linux.yml"
       - "packaging/arch/**"
   pull_request:
     paths:
       - "cmux-tui/**"
       - "ghostty"
+      - "cmux-desktop/**"
       - ".github/workflows/ci-arch-linux.yml"
       - "packaging/arch/**"
   workflow_dispatch:
@@ -67,3 +69,64 @@ jobs:
           sleep 3
           ./target/debug/cmux-tui server status --session ci-smoke
           ./target/debug/cmux-tui server stop --session ci-smoke
+
+  desktop:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git nodejs npm
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install cmux-desktop dependencies
+        working-directory: cmux-desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck cmux-desktop
+        working-directory: cmux-desktop
+        run: npx tsc --noEmit
+
+      - name: Build cmux-desktop bundles
+        working-directory: cmux-desktop
+        run: npx electron-vite build
+
+      - name: Smoke: run under Xvfb against a real cmux-tui server
+        run: |
+          pacman -S --needed --noconfirm xorg-server-xvfb curl
+          curl -fsSL "https://files.cmux.com/cmux-tui/latest/cmux-tui-x86_64-unknown-linux-gnu" -o /usr/local/bin/cmux-tui
+          chmod +x /usr/local/bin/cmux-tui
+          cmux-tui server start --session ci-gui &
+          sleep 3
+          export CMUX_BIN=/usr/local/bin/cmux-tui CMUX_SESSION=ci-gui
+          cd cmux-desktop
+          xvfb-run -a npx electron . --no-sandbox --disable-gpu --disable-dev-shm-usage --ozone-platform=x11 &
+          ELECTRON_PID=$!
+          # let the window come up, attach and drive a terminal
+          sleep 15
+          python - <<'PY'
+          import socket, json, os, glob, time, sys
+          socks = glob.glob(os.environ.get("XDG_RUNTIME_DIR", "/tmp") + "/cmux-tui-*/*.sock") or glob.glob("/tmp/cmux-tui-*/*.sock")
+          assert socks, "no cmux-tui socket found"
+          s = socket.socket(socket.AF_UNIX); s.connect(socks[0]); f = s.makefile("rw")
+          def call(**kw):
+              f.write(json.dumps(kw) + "\n"); f.flush()
+              return json.loads(f.readline())
+          r = call(id=1, cmd="list-workspaces")
+          print(r)
+          # no workspaces yet — create one with a terminal like a user would
+          call(id=2, cmd="create-workspace", name="ci")
+          r = call(id=3, cmd="create-terminal", workspace=1)
+          surface = r["data"]["surface"]
+          call(id=4, cmd="send", surface=surface, text="echo ARCH-GUI-OK\n")
+          time.sleep(1)
+          print("surface", surface, "created and driven")
+          PY
+          sleep 2
+          kill $ELECTRON_PID || true
+          cmux-tui server stop --session ci-gui || true

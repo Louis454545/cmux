@@ -71,3 +71,28 @@ reconnects to a detached server.
   `machine-agent` is Unix-only and runs on Arch.
 - **Terminal**: run `cmux` inside Ghostty, foot, alacritty, kitty, WezTerm, or
   any modern terminal — the multiplexer renders inside it.
+
+## The GUI: cmux-desktop
+
+`cmux-desktop/` is the graphical cmux app for Linux — an Electron + React
+shell that speaks `cmux.protocol/2` to the same `cmux-tui` daemon: workspaces,
+split panes, per-pane tabs, real terminal surfaces (render-mode attach),
+browser panes, notification badges, command palette, split-resize drag.
+
+```bash
+cd cmux-desktop
+npm ci
+npm run build
+CMUX_SESSION=main npx electron .   # auto-starts `cmux server start --session main`
+```
+
+Package it for pacman:
+
+```bash
+cd packaging/arch/cmux-desktop
+makepkg -si    # produces /usr/bin/cmux-desktop + a .desktop entry
+```
+
+It needs a `cmux`/`cmux-tui` binary on `PATH` (any of the options above) or
+`CMUX_BIN=/path/to/cmux-tui`. Wayland works out of the box; Electron picks the
+right Ozone platform. Browser tabs embed a real webview — no extra setup.
