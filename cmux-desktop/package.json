@@ -1,0 +1,28 @@
+{
+  "name": "cmux-desktop",
+  "version": "0.1.0",
+  "description": "cmux for Linux — Ghostty-based terminal multiplexer for AI coding agents",
+  "main": "out/main/main.js",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "pack": "electron-vite build && electron-builder --dir",
+    "dist": "electron-vite build && electron-builder",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^39.2.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.2.0"
+  },
+  "dependencies": {}
+}
