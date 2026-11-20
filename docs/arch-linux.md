@@ -72,27 +72,37 @@ reconnects to a detached server.
 - **Terminal**: run `cmux` inside Ghostty, foot, alacritty, kitty, WezTerm, or
   any modern terminal — the multiplexer renders inside it.
 
-## The GUI: cmux-desktop
+## The GUI: cmux-gui (native Rust/GPUI)
 
-`cmux-desktop/` is the graphical cmux app for Linux — an Electron + React
-shell that speaks `cmux.protocol/2` to the same `cmux-tui` daemon: workspaces,
-split panes, per-pane tabs, real terminal surfaces (render-mode attach),
-browser panes, notification badges, command palette, split-resize drag.
+`cmux-gui/` is the graphical cmux app — a native Rust build on the GPUI
+toolkit that speaks `cmux.protocol/2` to the `cmux-tui` daemon over its
+unix socket: workspaces, split panes with draggable dividers, per-pane tabs,
+real terminal surfaces (render-mode attach), notification badges, the
+command palette (`Ctrl/Cmd-K`), pane zoom, and `Ctrl/Cmd-D`/`Ctrl/Cmd-T`/
+`Ctrl/Cmd-W` chords.
 
 ```bash
-cd cmux-desktop
-npm ci
-npm run build
-CMUX_SESSION=main npx electron .   # auto-starts `cmux server start --session main`
+cd cmux-gui
+cargo build --release
+CMUX_SESSION=main ./target/release/cmux-gui
 ```
 
 Package it for pacman:
 
 ```bash
-cd packaging/arch/cmux-desktop
-makepkg -si    # produces /usr/bin/cmux-desktop + a .desktop entry
+cd packaging/arch/cmux-gui
+makepkg -si    # produces /usr/bin/cmux-gui + a .desktop entry
 ```
 
 It needs a `cmux`/`cmux-tui` binary on `PATH` (any of the options above) or
-`CMUX_BIN=/path/to/cmux-tui`. Wayland works out of the box; Electron picks the
-right Ozone platform. Browser tabs embed a real webview — no extra setup.
+`CMUX_BIN=/path/to/cmux-tui`, and it auto-starts
+`cmux server start --session $CMUX_SESSION` (default `main`) when no socket
+exists. GPUI has no embedded webview, so browser panes render as a link card
+that opens the URL in your system browser. Wayland and X11 both work.
+
+## The GUI: cmux-desktop (Electron, deprecated)
+
+`cmux-desktop/` is the earlier Electron + React shell over the same
+`cmux.protocol/2` socket. It is superseded by `cmux-gui`; it remains as a
+reference implementation. Its one advantage is that browser panes embed a
+real webview.
