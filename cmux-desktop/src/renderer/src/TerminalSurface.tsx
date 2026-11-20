@@ -326,7 +326,10 @@ function namedKey(e: React.KeyboardEvent): string | null {
     Insert: "insert",
   };
   for (let i = 1; i <= 24; i++) map[`F${i}`] = `f${i}`;
-  if (e.key === "Tab" && e.shiftKey) return "backtab";
+  if (e.key === "Tab" && e.shiftKey) {
+    const rest = [e.ctrlKey && "ctrl", e.altKey && "alt"].filter(Boolean).join("+");
+    return rest ? `${rest}+backtab` : "backtab";
+  }
   const base = map[e.key];
   if (!base) return null;
   const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.shiftKey && "shift"]
