@@ -135,6 +135,8 @@ export class MuxSession extends EventEmitter {
   }
 
   attachRender(surface: number, cols?: number, rows?: number): MuxConnection {
+    // A duplicate attach (e.g. a remounted pane) retires the old stream.
+    const prev = this.attaches.get(surface);
     const conn = new MuxConnection(socketPathForSession(this.session), `attach-${surface}`);
     const params: Json = { surface, mode: "render" };
     if (cols && rows && this.identity?.capabilities.includes("attach-initial-size")) {
@@ -144,7 +146,10 @@ export class MuxSession extends EventEmitter {
     conn.call("attach-surface", params).catch((e) => conn.emit("attach-error", e));
     this.attaches.set(surface, conn);
     conn.on("event", (e) => this.emit("surface-event", e));
-    conn.on("close", () => this.attaches.delete(surface));
+    conn.on("close", () => {
+      if (this.attaches.get(surface) === conn) this.attaches.delete(surface);
+    });
+    prev?.close();
     return conn;
   }
 
