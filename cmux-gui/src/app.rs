@@ -1,12 +1,10 @@
 // Root GPUI view: sidebar + split-tree panes + tab strips + palette.
 use crate::model::*;
 use crate::mux::Mux;
-use crate::terminal;
 use crate::theme;
 use gpui::*;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::HashMap;
 
 actions!(
     cmux,
@@ -22,8 +20,8 @@ actions!(
     ]
 );
 
-type EventTx = smol::channel::Sender<Value>;
-type Job = Box<dyn FnOnce(&Mux, &EventTx) + Send>;
+pub(crate) type EventTx = smol::channel::Sender<Value>;
+pub(crate) type Job = Box<dyn FnOnce(&Mux, &EventTx) + Send>;
 
 #[derive(Clone)]
 pub enum Cmd {
@@ -37,8 +35,10 @@ pub struct RootView {
     pub(crate) fatal: Option<String>,
     pub(crate) tree: Tree,
     pub(crate) surfaces: HashMap<u64, SurfaceModel>,
-    pub(crate) attached: HashSet<u64>,
+    pub(crate) attached: HashMap<u64, bool>, // surface -> browser-mode attach
     pub(crate) focused_pane: Option<u64>,
+    pub(crate) browser_urls: HashMap<u64, String>,
+    pub(crate) reported_sizes: std::rc::Rc<std::cell::RefCell<HashMap<u64, (u32, u32)>>>,
     pub(crate) sidebar_w: f32,
     pub(crate) dragging_sidebar: bool,
     pub(crate) sidebar_drag_x: Pixels,
@@ -50,7 +50,7 @@ pub struct RootView {
     pub(crate) cell_w: f32,
     event_rx: smol::channel::Receiver<Value>,
     pub(crate) event_tx: EventTx,
-    call_tx: std::sync::mpsc::Sender<Job>,
+    pub(crate) call_tx: std::sync::mpsc::Sender<Job>,
 }
 
 impl RootView {
@@ -100,8 +100,10 @@ impl RootView {
             fatal: None,
             tree: Tree::default(),
             surfaces: HashMap::new(),
-            attached: HashSet::new(),
+            attached: HashMap::new(),
             focused_pane: None,
+            browser_urls: HashMap::new(),
+            reported_sizes: std::rc::Rc::new(std::cell::RefCell::new(HashMap::new())),
             sidebar_w: theme::SIDEBAR_W,
             sidebar_drag_x: px(0.),
             dragging_sidebar: false,
@@ -174,7 +176,7 @@ impl RootView {
                             self.tree = tree;
                             if self
                                 .focused_pane
-                                .map(|p| !self.all_panes().iter().any(|x| x.id == p))
+                                .map(|p| !self.active_panes().iter().any(|x| x.id == p))
                                 .unwrap_or(true)
                             {
                                 self.focused_pane = self
@@ -205,6 +207,13 @@ impl RootView {
                     }
                 }
             }
+            "browser-state" => {
+                if let Some(surface) = v.get("surface").and_then(|s| s.as_u64()) {
+                    if let Some(url) = v.get("url").and_then(|u| u.as_str()) {
+                        self.browser_urls.insert(surface, url.to_string());
+                    }
+                }
+            }
             "detached" => {
                 if let Some(surface) = v.get("surface").and_then(|s| s.as_u64()) {
                     self.surfaces.remove(&surface);
@@ -231,6 +240,14 @@ impl RootView {
             .collect()
     }
 
+    /// Panes of the workspace currently shown; focus and input must only
+    /// ever target these — panes of other workspaces are hidden.
+    pub(crate) fn active_panes(&self) -> Vec<&Pane> {
+        self.active_workspace()
+            .map(|w| w.screens.iter().flat_map(|s| s.panes.iter()).collect())
+            .unwrap_or_default()
+    }
+
     pub(crate) fn active_workspace(&self) -> Option<&Workspace> {
         self.tree
             .workspaces
@@ -246,7 +263,7 @@ impl RootView {
 
     pub(crate) fn focused_terminal_surface(&self) -> Option<u64> {
         let pane_id = self.focused_pane?;
-        let pane = self.all_panes().into_iter().find(|p| p.id == pane_id)?;
+        let pane = self.active_panes().into_iter().find(|p| p.id == pane_id)?;
         let tab = pane.tabs.get(pane.active_tab)?;
         if tab.dead {
             return None;

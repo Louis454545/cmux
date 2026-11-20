@@ -129,6 +129,20 @@ impl Connection {
             }
         }
     }
+
+    /// Close the socket; the reader thread exits and pending calls fail.
+    pub fn shutdown(&self) {
+        if let Ok(s) = self.write.lock() {
+            let _ = s.shutdown(std::net::Shutdown::Both);
+        }
+    }
+}
+
+/// One attached surface: its connection plus the attach lease the daemon
+/// issued (needed by `detach-attached-view`).
+struct Attach {
+    conn: Arc<Connection>,
+    lease: Option<String>,
 }
 
 /// Session driver: one control connection plus one connection per
@@ -137,7 +151,7 @@ pub struct Mux {
     pub control: Arc<Connection>,
     pub session: String,
     pub identity: Value,
-    attaches: Mutex<HashMap<u64, Arc<Connection>>>,
+    attaches: Mutex<HashMap<u64, Attach>>,
     events: smol::channel::Sender<Value>,
 }
 
@@ -181,16 +195,47 @@ impl Mux {
     /// Attach a render-mode connection for one surface. Re-attaching the
     /// same surface retires the previous stream.
     pub fn attach_render(&self, surface: u64) {
+        self.attach(surface, json!({"mode": "render"}));
+    }
+
+    /// Attach in default mode for browser surfaces: the stream carries
+    /// `browser-state` events (URL, title) rather than cell renders.
+    pub fn attach_browser(&self, surface: u64) {
+        self.attach(surface, json!({}));
+    }
+
+    fn attach(&self, surface: u64, extra: Value) {
         self.detach(surface);
         let path = socket_path_for_session(&self.session);
         if let Ok(conn) = Connection::open(&path, self.events.clone()) {
-            conn.call("attach-surface", json!({"surface": surface, "mode": "render"}))
-                .ok();
-            self.attaches.lock().unwrap().insert(surface, conn);
+            let mut req = json!({"surface": surface});
+            if let Some(obj) = extra.as_object() {
+                for (k, v) in obj {
+                    req[k] = v.clone();
+                }
+            }
+            let lease = conn
+                .call("attach-surface", req)
+                .ok()
+                .and_then(|d| d.get("lease").and_then(|l| l.as_str()).map(String::from));
+            self.attaches
+                .lock()
+                .unwrap()
+                .insert(surface, Attach { conn, lease });
         }
     }
 
+    /// Retire one attach: close the lease server-side and shut the socket
+    /// down so its reader thread exits instead of leaking.
     pub fn detach(&self, surface: u64) {
-        self.attaches.lock().unwrap().remove(&surface);
+        if let Some(a) = self.attaches.lock().unwrap().remove(&surface) {
+            if let Some(lease) = &a.lease {
+                let _ = a.conn.call(
+                    "detach-attached-view",
+                    json!({"surface": surface, "lease": lease}),
+                );
+            }
+            a.conn.shutdown();
+        }
     }
 }

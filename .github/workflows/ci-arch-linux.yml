@@ -53,10 +53,10 @@ jobs:
 
       - name: Verify Zig version
         run: |
-          required=$(scripts/ghostty-zig-version.sh)
+          required=$(bash scripts/ghostty-zig-version.sh)
           actual=$(zig version)
           echo "ghostty minimum_zig_version=$required, zig=$actual"
-          scripts/ghostty-zig-version.sh && zig version
+          bash scripts/ghostty-zig-version.sh && zig version
 
       - name: Build cmux-tui
         working-directory: cmux-tui

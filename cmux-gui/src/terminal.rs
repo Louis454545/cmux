@@ -2,7 +2,7 @@
 use crate::model::SurfaceModel;
 use crate::theme;
 use gpui::{
-    canvas, fill, point, px, size, App, Bounds, FontStyle, FontWeight, Hsla, Pixels,
+    canvas, fill, point, px, size, App, Bounds, FontStyle, FontWeight, Pixels,
     StrikethroughStyle, TextRun, UnderlineStyle, Window,
 };
 
@@ -15,14 +15,36 @@ const INVERSE: u64 = 0x8;
 const DIM: u64 = 0x10;
 const INVISIBLE: u64 = 0x20;
 
-#[derive(Clone)]
 pub struct Terminal {
     pub model: SurfaceModel,
     pub cell_w: f32,
+    pub surface: u64,
+    pub report: std::rc::Rc<dyn Fn(u32, u32)>,
 }
 
-pub fn element(model: SurfaceModel, cell_w: f32) -> impl gpui::IntoElement {
-    let t = Terminal { model, cell_w };
+impl Clone for Terminal {
+    fn clone(&self) -> Self {
+        Terminal {
+            model: self.model.clone(),
+            cell_w: self.cell_w,
+            surface: self.surface,
+            report: self.report.clone(),
+        }
+    }
+}
+
+pub fn element(
+    model: SurfaceModel,
+    cell_w: f32,
+    surface: u64,
+    report: std::rc::Rc<dyn Fn(u32, u32)>,
+) -> impl gpui::IntoElement {
+    let t = Terminal {
+        model,
+        cell_w,
+        surface,
+        report,
+    };
     canvas(
         move |_bounds, _window, _cx| t.clone(),
         move |bounds, t, window, cx| paint(bounds, &t, window, cx),
@@ -31,6 +53,10 @@ pub fn element(model: SurfaceModel, cell_w: f32) -> impl gpui::IntoElement {
 
 fn paint(bounds: Bounds<Pixels>, t: &Terminal, window: &mut Window, cx: &mut App) {
     let m = &t.model;
+    // Report the grid this view occupies (shared sizing contract).
+    let cols = (f32::from(bounds.size.width) / t.cell_w).floor().max(1.) as u32;
+    let rows = (f32::from(bounds.size.height) / theme::CELL_H).floor().max(1.) as u32;
+    (t.report)(cols, rows);
     let default_fg = theme::hex(&m.default_fg);
     let default_bg = theme::hex(&m.default_bg);
     let cell_w = px(t.cell_w);

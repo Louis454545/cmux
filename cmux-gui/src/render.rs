@@ -6,7 +6,7 @@ use crate::terminal;
 use crate::theme;
 use gpui::*;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 impl RootView {
     fn titlebar(&self, ws_name: &str) -> impl IntoElement {
@@ -502,16 +502,35 @@ impl RootView {
     }
 
     fn terminal_tab(&self, tab: &Tab) -> impl IntoElement {
+        let surface = tab.surface;
+        let sizes = self.reported_sizes.clone();
+        let tx = self.call_tx.clone();
+        let report = std::rc::Rc::new(move |cols: u32, rows: u32| {
+            if sizes.borrow_mut().insert(surface, (cols, rows)) != Some((cols, rows)) {
+                let _ = tx.send(Box::new(move |mux: &Mux, _ev| {
+                    let _ = mux.control.call(
+                        "resize-surface",
+                        json!({"surface": surface, "cols": cols, "rows": rows}),
+                    );
+                }));
+            }
+        });
         div().flex().flex_1().bg(theme::TERM_BG).child(
             terminal::element(
                 self.surfaces.get(&tab.surface).cloned().unwrap_or_default(),
                 self.cell_w,
+                tab.surface,
+                report,
             ),
         )
     }
 
     fn browser_tab(&self, tab: &Tab) -> impl IntoElement {
-        let url = tab.browser_source.clone().unwrap_or_default();
+        let url = self
+            .browser_urls
+            .get(&tab.surface)
+            .cloned()
+            .unwrap_or_default();
         let label = if url.is_empty() {
             "about:blank".to_string()
         } else {
@@ -547,26 +566,39 @@ impl RootView {
 
 impl Render for RootView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Attach/detach render surfaces to match what's visible this frame.
-        let mut now_attached: HashSet<u64> = HashSet::new();
+        // Attach/detach surfaces to match what's visible this frame.
+        // PTYs attach in render mode; browser tabs attach in default mode
+        // for their browser-state (URL) stream.
+        let mut now_attached: HashMap<u64, bool> = HashMap::new();
         if let Some(s) = self.active_screen() {
             for p in &s.panes {
                 for t in &p.tabs {
-                    if t.kind == "pty" || t.kind.is_empty() {
-                        now_attached.insert(t.surface);
+                    if t.kind == "browser" {
+                        now_attached.insert(t.surface, true);
+                    } else if t.kind == "pty" || t.kind.is_empty() {
+                        now_attached.insert(t.surface, false);
                     }
                 }
             }
         }
-        for added in now_attached.difference(&self.attached) {
-            let surface = *added;
+        for (surface, browser) in &now_attached {
+            if self.attached.get(surface) == Some(browser) {
+                continue;
+            }
+            let (surface, browser) = (*surface, *browser);
             self.enqueue(Box::new(move |mux: &Mux, _ev| {
-                mux.attach_render(surface);
+                if browser {
+                    mux.attach_browser(surface);
+                } else {
+                    mux.attach_render(surface);
+                }
             }));
         }
-        for gone in self.attached.difference(&now_attached) {
-            let surface = *gone;
-            self.enqueue(Box::new(move |mux: &Mux, _ev| mux.detach(surface)));
+        for surface in self.attached.keys() {
+            if !now_attached.contains_key(surface) {
+                let surface = *surface;
+                self.enqueue(Box::new(move |mux: &Mux, _ev| mux.detach(surface)));
+            }
         }
         self.attached = now_attached;
 

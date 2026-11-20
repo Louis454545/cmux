@@ -230,6 +230,14 @@ pub fn apply_render_event(model: &mut SurfaceModel, e: &Value) {
             e.get("scrollback_rows").and_then(|v| v.as_u64()).unwrap_or(0);
         return;
     }
+    // A resize arrives as a full delta carrying the new `size`; apply it
+    // before merging so grown bottom rows are not dropped.
+    if let Some(n) = e.pointer("/size/cols").and_then(|v| v.as_u64()) {
+        model.cols = n as u32;
+    }
+    if let Some(n) = e.pointer("/size/rows").and_then(|v| v.as_u64()) {
+        model.rows = n as u32;
+    }
     let full = e.get("full").and_then(|v| v.as_bool()).unwrap_or(false);
     if full {
         model.cells = parse_runs(&e["rows"]);
@@ -240,15 +248,9 @@ pub fn apply_render_event(model: &mut SurfaceModel, e: &Value) {
         for upd in parse_runs(&e["rows"]) {
             by_row.insert(upd.row, upd);
         }
-        if let Some(n) = e.pointer("/size/rows").and_then(|v| v.as_u64()) {
-            model.rows = n as u32;
-        }
         model.cells = (0..model.rows)
             .filter_map(|i| by_row.remove(&i))
             .collect();
-    }
-    if let Some(n) = e.pointer("/size/cols").and_then(|v| v.as_u64()) {
-        model.cols = n as u32;
     }
     model.cursor = parse_cursor(e);
     if let Some(fg) = e.get("default_fg").and_then(|v| v.as_str()) {

@@ -24,7 +24,7 @@ build() {
 }
 
 package() {
-  install -Dm755 "$srcdir/cmux-gui/target/release/cmux-gui" \
+  install -Dm755 "$srcdir/cmux-gui/cmux-gui/target/release/cmux-gui" \
     "$pkgdir/usr/bin/cmux-gui"
   install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/cmux-gui.desktop" <<'EOF'
 [Desktop Entry]
