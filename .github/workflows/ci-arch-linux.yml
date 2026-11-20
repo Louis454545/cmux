@@ -61,7 +61,7 @@ jobs:
         working-directory: cmux-tui
         run: cargo test --locked -p cmux-tui -p cmux-tui-core
 
-      - name: Smoke: server lifecycle
+      - name: "Smoke: server lifecycle"
         working-directory: cmux-tui
         run: |
           TERM=xterm-256color ./target/debug/cmux-tui --version
@@ -96,7 +96,7 @@ jobs:
         working-directory: cmux-desktop
         run: npx electron-vite build
 
-      - name: Smoke: run under Xvfb against a real cmux-tui server
+      - name: "Smoke: run under Xvfb against a real cmux-tui server"
         run: |
           pacman -S --needed --noconfirm xorg-server-xvfb curl
           curl -fsSL "https://files.cmux.com/cmux-tui/latest/cmux-tui-x86_64-unknown-linux-gnu" -o /usr/local/bin/cmux-tui
