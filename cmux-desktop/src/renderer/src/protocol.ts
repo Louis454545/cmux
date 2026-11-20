@@ -37,6 +37,7 @@ export interface Screen {
   name: string | null;
   active: boolean;
   active_pane: number;
+  zoomed_pane?: number | null;
   layout: SplitNode;
   panes: Pane[];
 }

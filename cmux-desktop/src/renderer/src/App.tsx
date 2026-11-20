@@ -321,10 +321,14 @@ function Sidebar() {
 }
 
 function WorkspaceRow({ ws }: { ws: Workspace }) {
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [hov, setHov] = useState(false);
-  const select = () =>
-    window.cmux.call("select-workspace", { workspace: ws.id }).then(() => refresh(dispatch));
+  const select = () => {
+    // select-workspace takes a zero-based index, not the workspace id.
+    const index = state.tree?.workspaces.findIndex((w) => w.id === ws.id) ?? -1;
+    if (index < 0) return;
+    window.cmux.call("select-workspace", { index }).then(() => refresh(dispatch));
+  };
   const unread = ws.unread ?? 0;
   return (
     <div
@@ -377,13 +381,21 @@ function WorkspaceRow({ ws }: { ws: Workspace }) {
 // ---------------- Screen: layout split tree ----------------
 function ScreenView({ screen }: { screen: Screen }) {
   const { state } = useApp();
+  const zoomed =
+    screen.zoomed_pane != null
+      ? screen.panes.find((p) => p.id === screen.zoomed_pane)
+      : undefined;
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-      <SplitNodeView
-        node={screen.layout}
-        panes={screen.panes}
-        focusedPane={state.focusedPane}
-      />
+      {zoomed ? (
+        <PaneView pane={zoomed} focused={zoomed.id === state.focusedPane} />
+      ) : (
+        <SplitNodeView
+          node={screen.layout}
+          panes={screen.panes}
+          focusedPane={state.focusedPane}
+        />
+      )}
     </div>
   );
 }
@@ -470,12 +482,26 @@ function SplitView({
       <div
         onMouseDown={startDrag}
         style={{
-          [horiz ? "width" : "height"]: dragging ? 3 : 1,
-          background: dragging ? theme.accent : theme.divider,
+          [horiz ? "width" : "height"]: 9,
+          [horiz ? "height" : "width"]: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           cursor: horiz ? "col-resize" : "row-resize",
           flexShrink: 0,
+          [horiz ? "marginLeft" : "marginTop"]: -4,
+          [horiz ? "marginRight" : "marginBottom"]: -4,
+          zIndex: 5,
         } as React.CSSProperties}
-      />
+      >
+        <div
+          style={{
+            [horiz ? "width" : "height"]: dragging ? 3 : 1,
+            [horiz ? "height" : "width"]: "100%",
+            background: dragging ? theme.accent : theme.divider,
+          } as React.CSSProperties}
+        />
+      </div>
       <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0 }}>
         <SplitNodeView node={node.b!} panes={panes} focusedPane={focusedPane} />
       </div>

@@ -50,7 +50,12 @@ export default function CommandPalette() {
       list.push({
         id: `goto-ws-${ws.id}`,
         title: `Go to workspace: ${ws.name}`,
-        run: () => after(window.cmux.call("select-workspace", { workspace: ws.id })),
+        run: () =>
+          after(
+            window.cmux.call("select-workspace", {
+              index: state.tree?.workspaces.findIndex((w) => w.id === ws.id) ?? -1,
+            })
+          ),
       });
     }
     return list;
