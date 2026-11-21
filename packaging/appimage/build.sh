@@ -56,7 +56,7 @@ done
 # dlopened dependencies that ldd cannot see (GPUI loads Vulkan and the
 # X11 xkbcommon extension at runtime).
 for name in libvulkan.so.1 libxkbcommon-x11.so.0; do
-    path="$(ldconfig -p | awk -v n="$name" '$1 == n {print $NF; exit}')"
+    path="$(ldconfig -p | grep -F "$name" | awk 'NR == 1 {print $NF}')"
     [ -n "$path" ] && install -m644 "$path" "$APPDIR/usr/lib/$name"
 done
 
