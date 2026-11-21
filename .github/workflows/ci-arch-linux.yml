@@ -36,7 +36,7 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm base-devel git rustup zig curl python
+          pacman -S --needed --noconfirm base-devel git rustup curl python xz minisign
 
       - name: Check out repository
         uses: actions/checkout@v4
@@ -53,12 +53,8 @@ jobs:
       - name: Init ghostty submodule
         run: git submodule update --init ghostty
 
-      - name: Verify Zig version
-        run: |
-          required=$(bash scripts/ghostty-zig-version.sh)
-          actual=$(zig version)
-          echo "ghostty minimum_zig_version=$required, zig=$actual"
-          bash scripts/ghostty-zig-version.sh && zig version
+      - name: Install required Zig
+        run: bash scripts/install-zig-ci.sh
 
       - name: Build cmux-tui
         working-directory: cmux-tui
@@ -110,8 +106,8 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm base-devel git rustup zig clang cmake pkgconf \
-            wayland libxcb libxkbcommon-x11 fontconfig freetype2 vulkan-icd-loader curl
+          pacman -S --needed --noconfirm base-devel git rustup clang cmake pkgconf \
+            wayland libxcb libxkbcommon-x11 fontconfig freetype2 vulkan-icd-loader curl xz minisign
 
       - name: Check out repository
         uses: actions/checkout@v4
@@ -128,12 +124,8 @@ jobs:
       - name: Init ghostty submodule
         run: git submodule update --init ghostty
 
-      - name: Verify Zig version
-        run: |
-          required=$(bash scripts/ghostty-zig-version.sh)
-          actual=$(zig version)
-          echo "ghostty minimum_zig_version=$required, zig=$actual"
-          bash scripts/ghostty-zig-version.sh && zig version
+      - name: Install required Zig
+        run: bash scripts/install-zig-ci.sh
 
       - name: Build AppImage
         run: bash packaging/appimage/build.sh
