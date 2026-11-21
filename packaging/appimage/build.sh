@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build cmux-gui + cmux-tui release binaries and package them as an AppImage.
 # Run on Linux (Arch: pacman -S rust clang cmake pkgconf wayland libxcb
-# fontconfig freetype2 vulkan-icd-loader appimagetool). Self-contained:
+# fontconfig freetype2 vulkan-icd-loader). Self-contained:
 # the AppImage bundles the `cmux` daemon binary, so nothing else is needed
 # besides a Vulkan/Wayland or X11-capable system.
 set -euo pipefail
@@ -51,5 +51,5 @@ else
     TOOL="$(command -v appimagetool)"
 fi
 
-"$TOOL" "$APPDIR" "$OUT/cmux-gui-${ARCH}.AppImage"
+APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUT/cmux-gui-${ARCH}.AppImage"
 echo "Built $OUT/cmux-gui-${ARCH}.AppImage"
