@@ -94,7 +94,14 @@ cd packaging/arch/cmux-gui
 makepkg -si    # produces /usr/bin/cmux-gui + a .desktop entry
 ```
 
-It needs a `cmux`/`cmux-tui` binary on `PATH` (any of the options above) or
+Or build a self-contained AppImage (bundles the `cmux` daemon, needs no
+install — the `appimage` CI job uploads it as a build artifact):
+
+```bash
+packaging/appimage/build.sh   # → dist/cmux-gui-<arch>.AppImage
+```
+
+Outside the AppImage it needs a `cmux`/`cmux-tui` binary on `PATH` (any of the options above) or
 `CMUX_BIN=/path/to/cmux-tui`, and it auto-starts
 `cmux server start --session $CMUX_SESSION` (default `main`) when no socket
 exists. GPUI has no embedded webview, so browser panes render as a link card
