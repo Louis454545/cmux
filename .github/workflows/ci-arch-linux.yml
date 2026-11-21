@@ -111,7 +111,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm
           pacman -S --needed --noconfirm base-devel git rustup zig clang cmake pkgconf \
-            wayland libxcb fontconfig freetype2 vulkan-icd-loader curl
+            wayland libxcb libxkbcommon-x11 fontconfig freetype2 vulkan-icd-loader curl
 
       - name: Check out repository
         uses: actions/checkout@v4

@@ -25,6 +25,7 @@ cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="$HERE/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$HERE/usr/bin/cmux-gui" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
@@ -41,6 +42,23 @@ Terminal=false
 EOF
 
 install -m644 "$ROOT/Assets.xcassets/AppIcon.appiconset/256.png" "$APPDIR/cmux-gui.png"
+
+# Bundle the shared libraries both binaries link against, minus the
+# core runtime every glibc system already provides.
+mkdir -p "$APPDIR/usr/lib"
+EXCLUDE='^linux-vdso|^ld-linux|^ld-musl|^libc\.so|^libm\.so|^libdl\.so|^librt\.so|^libpthread\.so|^libresolv|^libnss_|^libutil\.so|^libgcc_s\.so|^libstdc\+\+\.so'
+ldd "$APPDIR/usr/bin/cmux-gui" "$APPDIR/usr/bin/cmux" \
+    | awk '/=> \// {print $3}' | sort -u | while read -r lib; do
+    base="$(basename "$lib")"
+    echo "$base" | grep -qE "$EXCLUDE" && continue
+    install -m644 "$lib" "$APPDIR/usr/lib/$base"
+done
+# dlopened dependencies that ldd cannot see (GPUI loads Vulkan and the
+# X11 xkbcommon extension at runtime).
+for name in libvulkan.so.1 libxkbcommon-x11.so.0; do
+    path="$(ldconfig -p | awk -v n="$name" '$1 == n {print $NF; exit}')"
+    [ -n "$path" ] && install -m644 "$path" "$APPDIR/usr/lib/$name"
+done
 
 if ! command -v appimagetool >/dev/null 2>&1; then
     TOOL="$OUT/appimagetool"
