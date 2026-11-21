@@ -1,0 +1,60 @@
+# Maintainer: Louis454545
+# GUI package for cmux — Electron shell driving cmux-tui over cmux.protocol/2.
+# Build from a local checkout:  cd packaging/arch/cmux-desktop && makepkg -si
+# Requires cmux-tui at runtime (the daemon + `cmux` binary on PATH).
+pkgname=cmux-desktop-git
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Graphical cmux client for Linux — Ghostty terminal multiplexer for AI coding agents"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Louis454545/cmux"
+license=('GPL-3.0-or-later')
+depends=(
+  'cmux-tui-git'
+  'gtk3'
+  'nss'
+  'alsa-lib'
+  'libxss'
+  'libdrm'
+  'mesa'
+)
+makedepends=('git' 'npm')
+# For building from a remote ref instead of a local checkout, replace source
+# with e.g. git+https://github.com/Louis454545/cmux.git#branch=main
+source=()
+sha256sums=()
+
+_repo_root="$(cd "$startdir/../../.." && pwd)"
+
+prepare() {
+  cd "$_repo_root/cmux-desktop"
+  npm ci --no-audit --no-fund
+}
+
+build() {
+  cd "$_repo_root/cmux-desktop"
+  npx electron-vite build
+  npx electron-builder --linux dir
+}
+
+package() {
+  install -dm755 "$pkgdir/opt/cmux-desktop"
+  cp -a "$_repo_root/cmux-desktop/dist/linux-unpacked/." "$pkgdir/opt/cmux-desktop/"
+
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s /opt/cmux-desktop/cmux-desktop "$pkgdir/usr/bin/cmux-desktop"
+
+  install -dm755 "$pkgdir/usr/share/applications"
+  cat > "$pkgdir/usr/share/applications/cmux-desktop.desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=cmux
+Comment=Ghostty terminal multiplexer for AI coding agents
+Exec=cmux-desktop %U
+Icon=cmux-desktop
+Type=Application
+Categories=Utility;TerminalEmulator;
+StartupWMClass=cmux
+DESKTOP
+
+  install -Dm644 "$_repo_root/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

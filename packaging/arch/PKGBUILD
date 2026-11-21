@@ -1,0 +1,68 @@
+# Maintainer: Louis454545
+# cmux-tui for Arch Linux — builds the Rust TUI multiplexer from this repository.
+#
+# Build:
+#   cd packaging/arch && makepkg -si
+#
+# The build needs the `ghostty` git submodule (ghostty-vt-sys compiles
+# libghostty-vt.a from it with Zig) and a Zig version matching
+# `ghostty/build.zig.zon`'s minimum_zig_version. scripts/install-zig-ci.sh
+# resolves that version; if the repo `zig` package lags, install the AUR
+# `zig-bin` package or drop a zig tarball on PATH/ZIG.
+
+pkgname=cmux-tui-git
+_pkgname=cmux-tui
+pkgver=0.0.0.r0.g0000000
+pkgrel=1
+pkgdesc="cmux — Ghostty-based terminal multiplexer for AI coding agents (TUI)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Louis454545/cmux"
+license=('GPL-3.0-or-later' 'MIT')
+depends=('glibc' 'gcc-libs')
+makedepends=('git' 'rust' 'zig')
+provides=('cmux')
+conflicts=('cmux')
+options=('!debug' '!lto')
+# For a distributable/AUR package, use the remote source:
+#   source=("cmux::git+https://github.com/Louis454545/cmux.git#branch=devin/linux-arch")
+# This checkout-relative source builds what you have locally:
+source=("cmux::git+file://${startdir}/../..")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/cmux"
+  printf "0.0.0.r%s.g%s" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd "$srcdir/cmux"
+  git submodule update --init ghostty
+}
+
+build() {
+  cd "$srcdir/cmux/cmux-tui"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --release --locked \
+    -p cmux-tui \
+    -p chatmux-relay \
+    -p cmux-relay
+}
+
+check() {
+  cd "$srcdir/cmux/cmux-tui"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --release --locked -p cmux-tui --lib || true
+}
+
+package() {
+  cd "$srcdir/cmux"
+  install -Dm755 "$srcdir/target/release/cmux-tui" "$pkgdir/usr/bin/cmux"
+  ln -sf cmux "$pkgdir/usr/bin/cmux-tui"
+  install -Dm755 "$srcdir/target/release/cmux-tui-hook" "$pkgdir/usr/bin/cmux-tui-hook"
+  install -Dm755 "$srcdir/target/release/chatmux-relay" "$pkgdir/usr/bin/chatmux-relay"
+  install -Dm755 "$srcdir/target/release/cmux-relay" "$pkgdir/usr/bin/cmux-relay"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 cmux-tui/README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

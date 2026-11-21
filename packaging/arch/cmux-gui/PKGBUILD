@@ -1,0 +1,37 @@
+# cmux-gui — native GPUI GUI for cmux (Linux/Arch)
+pkgname=cmux-gui-git
+pkgver=0.1.0.r1
+pkgrel=1
+pkgdesc="Native Rust/GPUI graphical frontend for the cmux terminal multiplexer"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Louis454545/cmux"
+license=('custom')
+depends=('wayland' 'libxcb' 'fontconfig' 'freetype2' 'vulkan-icd-loader')
+makedepends=('rust' 'cmake' 'git' 'clang')
+conflicts=('cmux-gui')
+provides=('cmux-gui')
+source=('cmux-gui::git+https://github.com/Louis454545/cmux.git')
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$srcdir/cmux-gui/cmux-gui"
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's|host: ||p')"
+}
+
+build() {
+  cd "$srcdir/cmux-gui/cmux-gui"
+  cargo build --release --locked
+}
+
+package() {
+  install -Dm755 "$srcdir/cmux-gui/cmux-gui/target/release/cmux-gui" \
+    "$pkgdir/usr/bin/cmux-gui"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/cmux-gui.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=cmux
+Comment=cmux terminal multiplexer
+Exec=cmux-gui
+Categories=System;TerminalEmulator;
+EOF
+}

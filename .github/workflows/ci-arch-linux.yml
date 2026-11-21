@@ -1,0 +1,164 @@
+name: Arch Linux (cmux-tui)
+
+on:
+  push:
+    branches: [main, devin/linux-arch]
+    paths:
+      - "cmux-tui/**"
+      - "ghostty"
+      - "cmux-desktop/**"
+      - "cmux-gui/**"
+      - ".github/workflows/ci-arch-linux.yml"
+      - "packaging/arch/**"
+      - "packaging/appimage/**"
+  pull_request:
+    paths:
+      - "cmux-tui/**"
+      - "ghostty"
+      - "cmux-desktop/**"
+      - "cmux-gui/**"
+      - ".github/workflows/ci-arch-linux.yml"
+      - "packaging/arch/**"
+      - "packaging/appimage/**"
+  workflow_dispatch:
+
+concurrency:
+  group: arch-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ${{ github.repository_owner != 'manaflow-ai' && 'ubuntu-24.04' || vars.LINUX_RUNNER || 'blacksmith-4vcpu-ubuntu-2404' }}
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git rustup curl python xz minisign
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' cmux-tui/rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal
+          rustup default "$channel"
+
+      - name: Mark checkout safe for container git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Init ghostty submodule
+        run: git submodule update --init ghostty
+
+      - name: Install required Zig
+        run: bash scripts/install-zig-ci.sh
+
+      - name: Build cmux-tui
+        working-directory: cmux-tui
+        run: cargo build --locked -p cmux-tui -p chatmux-relay -p cmux-relay
+
+      - name: Test cmux-tui workspace
+        working-directory: cmux-tui
+        run: cargo test --locked -p cmux-tui -p cmux-tui-core
+
+      - name: "Smoke: server lifecycle"
+        working-directory: cmux-tui
+        run: |
+          TERM=xterm-256color ./target/debug/cmux-tui --version
+          ./target/debug/cmux-tui server start --session ci-smoke &
+          sleep 3
+          ./target/debug/cmux-tui server status --session ci-smoke
+          ./target/debug/cmux-tui server stop --session ci-smoke
+
+  gui:
+    runs-on: ${{ github.repository_owner != 'manaflow-ai' && 'ubuntu-24.04' || vars.LINUX_RUNNER || 'blacksmith-4vcpu-ubuntu-2404' }}
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git rust clang cmake pkgconf \
+            wayland libxcb fontconfig freetype2 vulkan-icd-loader
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build cmux-gui
+        working-directory: cmux-gui
+        run: cargo build --release --locked
+
+      - name: "Smoke: binary exists and links"
+        run: |
+          test -x cmux-gui/target/release/cmux-gui
+          ldd cmux-gui/target/release/cmux-gui | grep -v "not found"
+
+  appimage:
+    runs-on: ${{ github.repository_owner != 'manaflow-ai' && 'ubuntu-24.04' || vars.LINUX_RUNNER || 'blacksmith-4vcpu-ubuntu-2404' }}
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git rustup clang cmake pkgconf \
+            wayland libxcb libxkbcommon-x11 fontconfig freetype2 vulkan-icd-loader curl xz minisign
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' cmux-tui/rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal
+          rustup default "$channel"
+
+      - name: Mark checkout safe for container git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Init ghostty submodule
+        run: git submodule update --init ghostty
+
+      - name: Install required Zig
+        run: bash scripts/install-zig-ci.sh
+
+      - name: Build AppImage
+        run: bash packaging/appimage/build.sh
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmux-gui-x86_64.AppImage
+          path: dist/cmux-gui-*.AppImage
+          if-no-files-found: error
+
+  desktop:
+    runs-on: ${{ github.repository_owner != 'manaflow-ai' && 'ubuntu-24.04' || vars.LINUX_RUNNER || 'blacksmith-4vcpu-ubuntu-2404' }}
+    container:
+      image: archlinux:latest
+      options: --platform linux/amd64
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel git nodejs npm
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install cmux-desktop dependencies
+        working-directory: cmux-desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck cmux-desktop
+        working-directory: cmux-desktop
+        run: npx tsc --noEmit
+
+      - name: Build cmux-desktop bundles
+        working-directory: cmux-desktop
+        run: npx electron-vite build
